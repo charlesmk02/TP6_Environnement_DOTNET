@@ -5,26 +5,22 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /app
 
 # Copy csproj and restore as distinct layers
-COPY ../AuthentificationApi/AuthentificationApi.csproj ./AuthentificationApi/
-COPY ../GestionOrdinateurs.Shared/GestionOrdinateurs.Shared.csproj ./GestionOrdinateurs.Shared/
-RUN dotnet restore ./AuthentificationApi
-RUN dotnet restore ./GestionOrdinateurs.Shared
+COPY GestionOrdinateurs.Client/GestionOrdinateurs.Client.csproj ./GestionOrdinateurs.Client/
+COPY GestionOrdinateurs.Shared/GestionOrdinateurs.Shared.csproj ./GestionOrdinateurs.Shared/
+RUN dotnet restore ./GestionOrdinateurs.Client/GestionOrdinateurs.Client.csproj
 
 # Copy the remaining source code
-COPY ./AuthentificationApi/ ./AuthentificationApi/
-COPY ./GestionOrdinateurs.Shared/ ./GestionOrdinateurs.Shared/
-RUN dotnet publish ./AuthentificationApi -c Release -o out
+COPY GestionOrdinateurs.Client/ ./GestionOrdinateurs.Client/
+COPY GestionOrdinateurs.Shared/ ./GestionOrdinateurs.Shared/
+RUN dotnet publish ./GestionOrdinateurs.Client/GestionOrdinateurs.Client.csproj -c Release -o out
 
-# Build runtime image
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
-WORKDIR /app
-COPY --from=build /app/out ./
+# =========================
+# Runtime Nginx (Port 5000)
+# =========================
+FROM nginx:alpine AS runtime
+COPY GestionOrdinateurs.Client/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/out/wwwroot /usr/share/nginx/html
 
-# Set environment variables if needed (e.g., ASPNETCORE_ENVIRONMENT)
-ENV ASPNETCORE_ENVIRONMENT=Development
+EXPOSE 5000
 
-# Expose port 5157
-EXPOSE 5157
-
-# Define the entry point
-ENTRYPOINT ["dotnet", "AuthentificationApi.dll"]
+CMD ["nginx", "-g", "daemon off;"]

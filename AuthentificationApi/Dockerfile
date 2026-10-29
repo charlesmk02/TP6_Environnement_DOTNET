@@ -5,26 +5,25 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /app
 
 # Copy csproj and restore as distinct layers
-COPY ../AuthentificationApi/AuthentificationApi.csproj ./AuthentificationApi/
-COPY ../GestionOrdinateurs.Shared/GestionOrdinateurs.Shared.csproj ./GestionOrdinateurs.Shared/
-RUN dotnet restore ./AuthentificationApi
-RUN dotnet restore ./GestionOrdinateurs.Shared
+COPY AuthentificationApi/AuthentificationApi.csproj ./AuthentificationApi/
+COPY GestionOrdinateurs.Shared/GestionOrdinateurs.Shared.csproj ./GestionOrdinateurs.Shared/
+RUN dotnet restore ./AuthentificationApi/AuthentificationApi.csproj
 
 # Copy the remaining source code
-COPY ./AuthentificationApi/ ./AuthentificationApi/
-COPY ./GestionOrdinateurs.Shared/ ./GestionOrdinateurs.Shared/
-RUN dotnet publish ./AuthentificationApi -c Release -o out
+COPY AuthentificationApi/ ./AuthentificationApi/
+COPY GestionOrdinateurs.Shared/ ./GestionOrdinateurs.Shared/
+RUN dotnet publish ./AuthentificationApi/AuthentificationApi.csproj -c Release -o out
 
-# Build runtime image
+# =========================
+# Runtime (Port 5157)
+# =========================
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app/out ./
 
-# Set environment variables if needed (e.g., ASPNETCORE_ENVIRONMENT)
 ENV ASPNETCORE_ENVIRONMENT=Development
+ENV ASPNETCORE_URLS=http://+:5157
 
-# Expose port 5157
 EXPOSE 5157
 
-# Define the entry point
-ENTRYPOINT ["dotnet", "AuthentificationApi.dll"]    
+ENTRYPOINT ["dotnet", "AuthentificationApi.dll"]
