@@ -48,42 +48,18 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Configuration JWT
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "longue-cle_pour_test_super_secret_key_123!";
-var key = Encoding.UTF8.GetBytes(jwtKey);
-
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-}).AddJwtBearer(options =>
-{
-    options.RequireHttpsMetadata = false;
-    options.SaveToken = true;
-    options.TokenValidationParameters = new TokenValidationParameters
+// Configuration JWT (Keycloak)
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
     {
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(key),
-        ValidateIssuer = false,
-        ValidateAudience = false
-    };
-    options.Events = new JwtBearerEvents
+        options.Authority = builder.Configuration["Keycloak:Authority"] ?? "http://localhost:8180/realms/GestionOrdinateursRealm";
+        options.RequireHttpsMetadata = false;
+        options.TokenValidationParameters = new TokenValidationParameters
         {
-            OnTokenValidated = context =>
-            {
-                Console.WriteLine($"Utilisateur utilisant un Token Valide --- {context.Principal?.Identity?.Name ?? "Anonymous"}");
-                return Task.CompletedTask;
-            },
-            OnAuthenticationFailed = context =>
-            {
-                Console.WriteLine("Token Invalide");
-                return Task.CompletedTask;
-            }
+            ValidateAudience = false,
+            ValidateIssuer = false
         };
-});
-
-
-
+    });
 
 // Injection des dépendances pour le service d'ordinateurs et le contexte de la base de données
 builder.Services.AddScoped<IOrdinateurService, OrdinateurService>();

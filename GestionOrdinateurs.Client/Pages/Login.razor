@@ -1,15 +1,17 @@
 @page "/login"
+@using System.IdentityModel.Tokens.Jwt
+@using System.Text.Json.Serialization
 @inject HttpClient Http
 @inject ISessionStorageService SessionStorage
 @inject NavigationManager Navigation
 
-<PageTitle>Connexion</PageTitle>
+<PageTitle>Connexion Keycloak</PageTitle>
 
 <div class="row justify-content-center mt-5">
     <div class="col-md-5">
         <div class="card shadow-sm">
             <div class="card-header bg-primary text-white">
-                <h4 class="mb-0">Connexion à la flotte</h4>
+                <h4 class="mb-0">Connexion à la flotte (Keycloak)</h4>
             </div>
             <div class="card-body">
                 @if (!string.IsNullOrEmpty(errorMessage))
@@ -20,9 +22,14 @@
                 }
 
                 <div class="mb-3">
-                    <label for="loginInput" class="form-label">Identifiant (login) :</label>
-                    <input id="loginInput" class="form-control" placeholder="ex: user1, user2..." @bind="login" />
-                    <small class="text-muted">Testez avec : user1 (Admin), user2 (Gestionnaire), ou un nom inconnu.</small>
+                    <label for="loginInput" class="form-label">Identifiant :</label>
+                    <input id="loginInput" class="form-control" placeholder="ex: user1, user2" @bind="login" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="passwordInput" class="form-label">Mot de passe :</label>
+                    <input id="passwordInput" type="password" class="form-control" placeholder="Mot de passe" @bind="password" />
+                    <small class="text-muted">Utilisateurs configurés dans Keycloak : user1 / password123, user2 / password123.</small>
                 </div>
 
                 <button class="btn btn-primary w-100" @onclick="SeConnecter" disabled="@isLoading">
@@ -42,28 +49,26 @@
 
 @code {
     private string login = string.Empty;
+    private string password = string.Empty;
     private string? errorMessage;
     private bool isLoading = false;
 
-    private class AuthResponse
+    private class KeycloakTokenResponse
     {
-        public string Token { get; set; } = string.Empty;
-        public string Login { get; set; } = string.Empty;
-        public string Role { get; set; } = string.Empty;
-    }
+        [JsonPropertyName("access_token")]
+        public string AccessToken { get; set; } = string.Empty;
 
-    private class ErrorResponse
-    {
-        public string? Message { get; set; }
+        [JsonPropertyName("token_type")]
+        public string TokenType { get; set; } = string.Empty;
     }
 
     private async Task SeConnecter()
     {
         errorMessage = null;
 
-        if (string.IsNullOrWhiteSpace(login))
+        if (string.IsNullOrWhiteSpace(login) || string.IsNullOrWhiteSpace(password))
         {
-            errorMessage = "Veuillez saisir votre login.";
+            errorMessage = "Veuillez renseigner votre identifiant et votre mot de passe.";
             return;
         }
 
@@ -71,35 +76,60 @@
 
         try
         {
-            // Appel à AuthentificationApi
-            var response = await Http.PostAsJsonAsync("http://localhost:5024/auth/login", new { Login = login });
+            // TP6.13 : Endpoint Keycloak pour obtenir le token
+            var tokenEndpoint = "http://localhost:8180/realms/GestionOrdinateursRealm/protocol/openid-connect/token";
+
+            var formData = new Dictionary<string, string>
+            {
+                { "client_id", "blazor-client" },
+                { "grant_type", "password" },
+                { "username", login },
+                { "password", password }
+            };
+
+            var requestMessage = new HttpRequestMessage(HttpMethod.Post, tokenEndpoint)
+            {
+                Content = new FormUrlEncodedContent(formData)
+            };
+
+            var response = await Http.SendAsync(requestMessage);
 
             if (response.IsSuccessStatusCode)
             {
-                var authResult = await response.Content.ReadFromJsonAsync<AuthResponse>();
-                if (authResult != null && !string.IsNullOrEmpty(authResult.Token))
+                var tokenResult = await response.Content.ReadFromJsonAsync<KeycloakTokenResponse>();
+
+                if (tokenResult != null && !string.IsNullOrEmpty(tokenResult.AccessToken))
                 {
-                    // TP5. étape 7 : enregistrer le token en session blazorstorage
-                    await SessionStorage.SetItemAsync("authToken", authResult.Token);
-                    await SessionStorage.SetItemAsync("userLogin", authResult.Login);
-                    await SessionStorage.SetItemAsync("userRole", authResult.Role);
-                    // Redirection vers la page d'accueil
+                    await SessionStorage.SetItemAsync("authToken", tokenResult.AccessToken);
+
+                
+                    var handler = new JwtSecurityTokenHandler();
+                    var jwt = handler.ReadJwtToken(tokenResult.AccessToken);
+                    
+                    var username = jwt.Claims.FirstOrDefault(c => c.Type == "preferred_username")?.Value ?? login;
+                    await SessionStorage.SetItemAsync("userLogin", username);
+
+                    // Extraction du rôle
+                    string role = "User";
+                    var realmAccessClaim = jwt.Claims.FirstOrDefault(c => c.Type == "realm_access")?.Value;
+                    if (!string.IsNullOrEmpty(realmAccessClaim) && realmAccessClaim.Contains("Admin"))
+                    {
+                        role = "Admin";
+                    }
+                    await SessionStorage.SetItemAsync("userRole", role);
+
+                    // Redirection vers l'accueil
                     Navigation.NavigateTo("/");
                 }
             }
-            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-            {
-                // Utilisateur introuvable 
-                errorMessage = "L'utilisateur n'existe pas.";
-            }
             else
             {
-                errorMessage = $"Erreur lors de la connexion ({response.StatusCode}).";
+                errorMessage = "Identifiant ou mot de passe incorrect (Keycloak).";
             }
         }
         catch (Exception ex)
         {
-            errorMessage = $"Erreur de communication : {ex.Message}";
+            errorMessage = $"Erreur de communication avec Keycloak : {ex.Message}";
         }
         finally
         {
