@@ -1,0 +1,21 @@
+## Build and output folders
+bin/
+obj/
+out/
+
+## Environment & Secrets
+.env
+*.user
+*.userosscache
+*.suo
+.local/
+
+## IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+## OS specific
+.DS_Store
+Thumbs.db

@@ -1,0 +1,109 @@
+@page "/login"
+@inject HttpClient Http
+@inject ISessionStorageService SessionStorage
+@inject NavigationManager Navigation
+
+<PageTitle>Connexion</PageTitle>
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">Connexion à la flotte</h4>
+            </div>
+            <div class="card-body">
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger" role="alert">
+                        @errorMessage
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label for="loginInput" class="form-label">Identifiant (login) :</label>
+                    <input id="loginInput" class="form-control" placeholder="ex: user1, user2..." @bind="login" />
+                    <small class="text-muted">Testez avec : user1 (Admin), user2 (Gestionnaire), ou un nom inconnu.</small>
+                </div>
+
+                <button class="btn btn-primary w-100" @onclick="SeConnecter" disabled="@isLoading">
+                    @if (isLoading)
+                    {
+                        <span>Connexion en cours...</span>
+                    }
+                    else
+                    {
+                        <span>Se connecter</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string login = string.Empty;
+    private string? errorMessage;
+    private bool isLoading = false;
+
+    private class AuthResponse
+    {
+        public string Token { get; set; } = string.Empty;
+        public string Login { get; set; } = string.Empty;
+        public string Role { get; set; } = string.Empty;
+    }
+
+    private class ErrorResponse
+    {
+        public string? Message { get; set; }
+    }
+
+    private async Task SeConnecter()
+    {
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(login))
+        {
+            errorMessage = "Veuillez saisir votre login.";
+            return;
+        }
+
+        isLoading = true;
+
+        try
+        {
+            // Appel à AuthentificationApi
+            var response = await Http.PostAsJsonAsync("http://localhost:5024/auth/login", new { Login = login });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var authResult = await response.Content.ReadFromJsonAsync<AuthResponse>();
+                if (authResult != null && !string.IsNullOrEmpty(authResult.Token))
+                {
+                    // TP5. étape 7 : enregistrer le token en session blazorstorage
+                    await SessionStorage.SetItemAsync("authToken", authResult.Token);
+                    await SessionStorage.SetItemAsync("userLogin", authResult.Login);
+                    await SessionStorage.SetItemAsync("userRole", authResult.Role);
+                    // Redirection vers la page d'accueil
+                    Navigation.NavigateTo("/");
+                }
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                // Utilisateur introuvable 
+                errorMessage = "L'utilisateur n'existe pas.";
+            }
+            else
+            {
+                errorMessage = $"Erreur lors de la connexion ({response.StatusCode}).";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Erreur de communication : {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

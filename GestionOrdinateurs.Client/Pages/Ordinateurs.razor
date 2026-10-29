@@ -1,0 +1,99 @@
+@page "/ordinateurs"
+@using System.Net.Http.Headers
+@using GestionOrdinateurs.Shared
+@inject HttpClient Http
+@inject ISessionStorageService SessionStorage
+
+<PageTitle>Liste des ordinateurs</PageTitle>
+
+<h3>Flotte d'ordinateurs</h3>
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-warning">
+        @errorMessage
+        <br />
+        <a href="login" class="alert-link">Se connecter</a>
+    </div>
+}
+else if (ordinateurs == null)
+{
+    <p><em>Chargement des ordinateurs en cours...</em></p>
+}
+else
+{
+    <table class="table table-striped table-hover mt-3 shadow-sm">
+        <thead class="table-dark">
+            <tr>
+                <th>Nom</th>
+                <th>Prix</th>
+                <th>Devise</th>
+                <th>Vendu</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var ordi in ordinateurs)
+            {
+                <tr>
+                    <td><strong>@ordi.Nom</strong></td>
+                    <td>@ordi.Prix.ToString("F2")</td>
+                    <td><span class="badge bg-secondary">EUR</span></td>
+                    <td>
+                        @if (ordi.Vendu)
+                        {
+                            <span class="badge bg-danger">Oui</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-success">Non</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Ordinateur>? ordinateurs;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Récupération du token en session
+            var token = await SessionStorage.GetItemAsync<string>("authToken");
+
+            if (string.IsNullOrEmpty(token))
+            {
+                errorMessage = "Vous devez être connecté pour consulter la flotte d'ordinateurs.";
+                return;
+            }
+
+            // Requête HTTP avec le token JWT (cours 6, slide 23)
+            // Appel via la Gateway YARP sur le port 5010 (TP5.étape. 16)
+            var request = new HttpRequestMessage(HttpMethod.Get, "http://localhost:5010/ordinateurs");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                ordinateurs = await response.Content.ReadFromJsonAsync<List<Ordinateur>>();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                errorMessage = "Votre session a expiré ou le token est invalide.";
+            }
+            else
+            {
+                errorMessage = $"Erreur lors de la récupération ({response.StatusCode}).";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Erreur de communication : {ex.Message}";
+        }
+    }
+}

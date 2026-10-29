@@ -1,0 +1,92 @@
+@page "/reparations"
+@using System.Net.Http.Headers
+@using GestionOrdinateurs.Shared
+@inject HttpClient Http
+@inject ISessionStorageService SessionStorage
+
+<PageTitle>Historique des réparations</PageTitle>
+
+<h3>Historique des réparations</h3>
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-warning">
+        @errorMessage
+        <br />
+        <a href="login" class="alert-link">Se connecter</a>
+    </div>
+}
+else if (historique == null)
+{
+    <p><em>Chargement de l'historique en cours...</em></p>
+}
+else if (historique.Count == 0)
+{
+    <p class="text-muted">Aucune réparation enregistrée.</p>
+}
+else
+{
+    <table class="table table-striped table-hover mt-3 shadow-sm">
+        <thead class="table-dark">
+            <tr>
+                <th>Ordinateur</th>
+                <th>Technicien</th>
+                <th>Type de réparation</th>
+                <th>Date d'intervention</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var rep in historique)
+            {
+                <tr>
+                    <td><strong>@rep.NomOrdinateur</strong> (ID: @rep.OrdinateurId)</td>
+                    <td>@rep.Technicien</td>
+                    <td>@rep.TypeReparation</td>
+                    <td>@rep.DateIntervention.ToString("dd/MM/yyyy HH:mm")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<HistoriqueReparationRecord>? historique;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var token = await SessionStorage.GetItemAsync<string>("authToken");
+
+            if (string.IsNullOrEmpty(token))
+            {
+                errorMessage = "Vous devez être connecté pour consulter l'historique des réparations.";
+                return;
+            }
+
+            // Appel via la Gateway YARP sur le port 5010 (TP 5 Étape 16)
+            var request = new HttpRequestMessage(HttpMethod.Get, "http://localhost:5010/reparations/historique");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                historique = await response.Content.ReadFromJsonAsync<List<HistoriqueReparationRecord>>();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                errorMessage = "Votre session a expiré ou le token est invalide.";
+            }
+            else
+            {
+                errorMessage = $"Erreur lors de la récupération ({response.StatusCode}).";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Erreur de communication : {ex.Message}";
+        }
+    }
+}
